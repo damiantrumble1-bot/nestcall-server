@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NestCall</title>
+<style>
+  :root{
+    --bg:#0B0D10; --panel:#14171B; --panel-2:#1D2126;
+    --text:#F2F3F4; --text-dim:#8B929B;
+    --accent:#6FA8DC; --warm:#E8A857; --danger:#D9695F; --ok:#7FB88A;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    overflow:hidden; user-select:none; }
+  #app{ position:relative; width:100%; height:100vh; height:100dvh; background:#000; }
+
+  /* ---------- Join screen ---------- */
+  #joinScreen{
+    position:absolute; inset:0; z-index:100; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; padding:32px; text-align:center;
+    background:radial-gradient(circle at 50% 20%, #1c1a16 0%, #0B0D10 65%);
+  }
+  #joinScreen h1{ font-size:26px; margin:0; font-weight:700; letter-spacing:-.2px; }
+  #joinScreen p{ font-size:14px; color:var(--text-dim); margin:0; max-width:280px; line-height:1.5; }
+  #roomInput{
+    width:220px; text-align:center; font-size:22px; letter-spacing:4px; font-weight:700;
+    padding:14px 10px; border-radius:14px; border:1.5px solid rgba(255,255,255,.15);
+    background:var(--panel); color:var(--text); text-transform:uppercase;
+  }
+  #roomInput:focus{ outline:none; border-color:var(--warm); }
+  #joinBtn{
+    background:var(--warm); color:#241a08; border:none; padding:14px 28px;
+    border-radius:100px; font-size:15px; font-weight:700; cursor:pointer;
+  }
+  #joinBtn:disabled{ opacity:.5; }
+  #joinStatus{ font-size:13px; color:var(--text-dim); min-height:18px; }
+  #shareHint{ font-size:12px; color:var(--text-dim); max-width:260px; }
+
+  /* ---------- Call screen (same layout as before) ---------- */
+  #remoteVideo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+  #remoteLabel{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 14px); left:0; right:0;
+    text-align:center; font-size:15px; font-weight:600; color:var(--text);
+    text-shadow:0 1px 6px rgba(0,0,0,.6); pointer-events:none; }
+  #remoteSub{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 36px); left:0; right:0;
+    text-align:center; font-size:12.5px; color:var(--text-dim); text-shadow:0 1px 6px rgba(0,0,0,.6); pointer-events:none; }
+  #remoteMutedBadge{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 14px); left:16px;
+    background:rgba(0,0,0,.45); backdrop-filter:blur(6px); padding:6px 10px; border-radius:100px;
+    font-size:12px; font-weight:600; color:var(--warm); display:none; align-items:center; gap:6px; }
+  #remoteMutedBadge.show{ display:flex; }
+
+  #localWrap{ position:absolute; width:104px; height:150px; border-radius:16px; overflow:hidden;
+    top:calc(env(safe-area-inset-top,0px) + 64px); right:16px; box-shadow:0 6px 18px rgba(0,0,0,.45);
+    border:1px solid rgba(255,255,255,.12); touch-action:none; z-index:20; background:#111; }
+  #localVideo{ width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
+  #localOffCover{ position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:var(--panel-2); }
+  #localOffCover.show{ display:flex; }
+  #localOffCover svg{ width:22px; height:22px; opacity:.6; }
+
+  #controls{ position:absolute; left:0; right:0; bottom:0; padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 22px);
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0) 90%); z-index:10; }
+  #row{ display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .btn{ width:58px; height:58px; border-radius:50%; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; background:rgba(60,64,70,.72);
+    backdrop-filter:blur(10px); transition:background .15s ease, transform .1s ease; color:var(--text); }
+  .btn svg{ width:24px; height:24px; }
+  .btn:active{ transform:scale(.93); }
+  .btn.danger-active{ background:var(--danger); color:#fff; }
+  .btn.warn-active{ background:var(--warm); color:#241a08; }
+  #endBtn{ width:64px; height:64px; background:var(--danger); color:#fff; }
+  #endBtn svg{ width:26px; height:26px; }
+  .label{ font-size:11px; color:var(--text-dim); text-align:center; margin-top:6px; width:64px; }
+  .btnGroup{ display:flex; flex-direction:column; align-items:center; }
+  #lockBtn.active{ background:var(--warm); color:#241a08; }
+
+  #lockOverlay{ position:absolute; inset:0; z-index:50; display:none; align-items:flex-end; justify-content:center; }
+  #lockOverlay.show{ display:flex; }
+  #lockBanner{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 14px); left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.5); backdrop-filter:blur(8px); padding:8px 16px; border-radius:100px;
+    display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--warm); }
+  #lockBanner svg{ width:16px; height:16px; }
+  #unlockZone{ margin-bottom:calc(env(safe-area-inset-bottom,0px) + 34px); display:flex; flex-direction:column;
+    align-items:center; gap:12px; }
+  #unlockRing{ width:78px; height:78px; border-radius:50%; position:relative; background:rgba(30,32,36,.55);
+    backdrop-filter:blur(10px); border:2px solid rgba(255,255,255,.18); display:flex; align-items:center;
+    justify-content:center; overflow:hidden; }
+  #unlockRing svg{ width:28px; height:28px; color:var(--text-dim); z-index:2; }
+  #unlockFill{ position:absolute; left:0; right:0; bottom:0; height:0%; background:var(--warm); opacity:.9;
+    transition:height .05s linear; }
+  #unlockHint{ font-size:12.5px; color:var(--text-dim); text-align:center; max-width:220px; }
+
+  #toast{ position:absolute; left:50%; bottom:150px; transform:translateX(-50%) translateY(10px);
+    background:rgba(20,22,26,.92); border:1px solid rgba(255,255,255,.08); padding:10px 16px;
+    border-radius:100px; font-size:13px; color:var(--text); opacity:0; pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease; z-index:60; white-space:nowrap; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  #callUI{ display:none; }
+  #callUI.show{ display:block; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="joinScreen">
+    <h1>NestCall</h1>
+    <p>Enter the same call code as the person you're calling. Whoever taps first waits — the second person to join connects you both automatically.</p>
+    <input id="roomInput" maxlength="6" placeholder="CODE" autocapitalize="characters" autocomplete="off">
+    <button id="joinBtn">Start / Join call</button>
+    <div id="joinStatus"></div>
+    <div id="shareHint">Tip: text the other person this same code so you both type it in.</div>
+  </div>
+
+  <div id="callUI">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <div id="remoteMutedBadge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      <span>You've silenced them</span>
+    </div>
+    <div id="remoteLabel">Connected</div>
+    <div id="remoteSub"></div>
+
+    <div id="localWrap">
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div id="localOffCover">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/><path d="M22 8.5v7l-5-3.5 5-3.5Z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div id="row">
+        <div class="btnGroup">
+          <button class="btn" id="micBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+          <div class="label">My mic</div>
+        </div>
+        <div class="btnGroup">
+          <button class="btn" id="camBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </button>
+          <div class="label">My camera</div>
+        </div>
+        <div class="btnGroup">
+          <button class="btn" id="silenceBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+          </button>
+          <div class="label">Silence them</div>
+        </div>
+        <div class="btnGroup">
+          <button class="btn" id="lockBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </button>
+          <div class="label">Baby lock</div>
+        </div>
+      </div>
+      <button id="endBtn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-2.5 0-4.85.53-7 1.48a1.5 1.5 0 0 0-.85 1.7l.62 2.72a1.5 1.5 0 0 0 1.62 1.16c.98-.14 1.98-.22 3-.24l.4-2.1a1 1 0 0 1 .78-.79c.46-.1.94-.15 1.43-.15s.97.05 1.43.15a1 1 0 0 1 .78.79l.4 2.1c1.02.02 2.02.1 3 .24a1.5 1.5 0 0 0 1.62-1.16l.62-2.72a1.5 1.5 0 0 0-.85-1.7C16.85 9.53 14.5 9 12 9Z"/></svg>
+      </button>
+    </div>
+
+    <div id="lockOverlay">
+      <div id="lockBanner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Baby lock is on — call keeps going</span>
+      </div>
+      <div id="unlockZone">
+        <div id="unlockRing">
+          <div id="unlockFill"></div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div id="unlockHint">Press and hold for 3 seconds to unlock</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const joinScreen = $('joinScreen'), roomInput = $('roomInput'), joinBtn = $('joinBtn'), joinStatus = $('joinStatus');
+  const callUI = $('callUI');
+  const localVideo = $('localVideo'), remoteVideo = $('remoteVideo'), localOffCover = $('localOffCover');
+  const micBtn = $('micBtn'), camBtn = $('camBtn'), silenceBtn = $('silenceBtn'), lockBtn = $('lockBtn'), endBtn = $('endBtn');
+  const lockOverlay = $('lockOverlay'), unlockFill = $('unlockFill'), unlockRing = $('unlockRing');
+  const remoteMutedBadge = $('remoteMutedBadge'), remoteSub = $('remoteSub'), toastEl = $('toast'), localWrap = $('localWrap');
+
+  let ws, pc, localStream, room, isInitiator = false;
+  let micOn = true, camOn = true, silenced = false, locked = false;
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=> toastEl.classList.remove('show'), 1800);
+  }
+
+  const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  async function startCall(){
+    room = roomInput.value.trim().toUpperCase();
+    if (!room){ joinStatus.textContent = 'Type a code first'; return; }
+    joinBtn.disabled = true;
+    joinStatus.textContent = 'Getting your camera ready…';
+
+    try{
+      localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      localVideo.srcObject = localStream;
+    }catch(e){
+      joinStatus.textContent = 'Camera/mic permission needed to call.';
+      joinBtn.disabled = false;
+      return;
+    }
+
+    joinStatus.textContent = 'Waiting for the other person…';
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host);
+
+    ws.onopen = () => ws.send(JSON.stringify({ type:'join', room }));
+
+    ws.onmessage = async (ev) => {
+      const msg = JSON.parse(ev.data);
+
+      if (msg.type === 'full'){
+        joinStatus.textContent = 'That code already has two people on it. Try a different one.';
+        joinBtn.disabled = false;
+        return;
+      }
+
+      if (msg.type === 'joined'){
+        isInitiator = msg.initiator;
+        return;
+      }
+
+      if (msg.type === 'ready'){
+        setupPeerConnection();
+        if (isInitiator){
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          ws.send(JSON.stringify({ type:'offer', sdp: offer }));
+        }
+        return;
+      }
+
+      if (msg.type === 'offer'){
+        if (!pc) setupPeerConnection();
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ type:'answer', sdp: answer }));
+        return;
+      }
+
+      if (msg.type === 'answer'){
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        return;
+      }
+
+      if (msg.type === 'ice-candidate'){
+        if (msg.candidate){
+          try{ await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }catch(e){}
+        }
+        return;
+      }
+
+      if (msg.type === 'peer-left'){
+        toast('The other person left the call');
+        remoteSub.textContent = 'They disconnected';
+        if (remoteVideo.srcObject) remoteVideo.srcObject = null;
+        return;
+      }
+    };
+
+    ws.onerror = () => { joinStatus.textContent = 'Connection error — try again.'; joinBtn.disabled = false; };
+  }
+
+  function setupPeerConnection(){
+    pc = new RTCPeerConnection(ICE_SERVERS);
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) ws.send(JSON.stringify({ type:'ice-candidate', candidate: e.candidate }));
+    };
+
+    pc.ontrack = (e) => {
+      remoteVideo.srcObject = e.streams[0];
+      joinScreen.style.display = 'none';
+      callUI.classList.add('show');
+      remoteSub.textContent = '';
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') toast('Connected');
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed'){
+        toast('Call lost connection');
+      }
+    };
+  }
+
+  joinBtn.addEventListener('click', startCall);
+  roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') startCall(); });
+
+  // ----- Mic -----
+  micBtn.addEventListener('click', () => {
+    micOn = !micOn;
+    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+    micBtn.classList.toggle('danger-active', !micOn);
+    toast(micOn ? 'Mic on' : 'Mic muted — they can still see you');
+  });
+
+  // ----- Camera -----
+  camBtn.addEventListener('click', () => {
+    camOn = !camOn;
+    if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = camOn);
+    camBtn.classList.toggle('danger-active', !camOn);
+    localOffCover.classList.toggle('show', !camOn);
+    toast(camOn ? 'Camera on' : 'Camera off — mic still connected');
+  });
+
+  // ----- Silence the other person (really mutes the incoming audio track) -----
+  silenceBtn.addEventListener('click', () => {
+    silenced = !silenced;
+    remoteVideo.muted = silenced;
+    silenceBtn.classList.toggle('warn-active', silenced);
+    remoteMutedBadge.classList.toggle('show', silenced);
+    toast(silenced ? "They're silenced on your end — call stays connected" : 'You can hear them again');
+  });
+
+  // ----- End call -----
+  endBtn.addEventListener('click', () => {
+    if (locked) return;
+    if (pc) pc.close();
+    if (ws) ws.close();
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    toast('Call ended');
+    callUI.classList.remove('show');
+    joinScreen.style.display = 'flex';
+    joinBtn.disabled = false;
+    joinStatus.textContent = '';
+  });
+
+  // ----- Baby lock -----
+  function setLocked(v){
+    locked = v;
+    lockOverlay.classList.toggle('show', locked);
+    lockBtn.classList.toggle('active', locked);
+    localWrap.style.zIndex = locked ? '5' : '20';
+  }
+  lockBtn.addEventListener('click', () => { setLocked(true); toast('Baby lock on — camera and call stay on'); });
+
+  let holdTimer = null, holdStart = 0;
+  const HOLD_MS = 3000;
+  function startHold(e){ e.preventDefault(); holdStart = Date.now(); tickHold(); }
+  function tickHold(){
+    const elapsed = Date.now() - holdStart;
+    const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
+    unlockFill.style.height = pct + '%';
+    if (pct >= 100){ setLocked(false); unlockFill.style.height = '0%'; toast('Unlocked'); return; }
+    holdTimer = requestAnimationFrame(tickHold);
+  }
+  function endHold(){ cancelAnimationFrame(holdTimer); unlockFill.style.height = '0%'; }
+  unlockRing.addEventListener('touchstart', startHold, {passive:false});
+  unlockRing.addEventListener('mousedown', startHold);
+  unlockRing.addEventListener('touchend', endHold);
+  unlockRing.addEventListener('touchcancel', endHold);
+  unlockRing.addEventListener('mouseup', endHold);
+  unlockRing.addEventListener('mouseleave', endHold);
+
+  // Draggable local PiP
+  (function makeDraggable(el){
+    let sx=0, sy=0, ox=0, oy=0, dragging=false;
+    function down(x,y){ dragging=true; sx=x; sy=y; const r = el.getBoundingClientRect(); ox=r.left; oy=r.top; }
+    function move(x,y){
+      if(!dragging) return;
+      const dx = x - sx, dy = y - sy;
+      let nx = ox + dx, ny = oy + dy;
+      nx = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, nx));
+      ny = Math.max(8, Math.min(window.innerHeight - el.offsetHeight - 8, ny));
+      el.style.left = nx + 'px'; el.style.top = ny + 'px'; el.style.right = 'auto';
+    }
+    function up(){ dragging=false; }
+    el.addEventListener('touchstart', e=>{ const t=e.touches[0]; down(t.clientX,t.clientY); }, {passive:true});
+    el.addEventListener('touchmove', e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); }, {passive:true});
+    el.addEventListener('touchend', up);
+    el.addEventListener('mousedown', e=> down(e.clientX,e.clientY));
+    window.addEventListener('mousemove', e=> move(e.clientX,e.clientY));
+    window.addEventListener('mouseup', up);
+  })(localWrap);
+
+})();
+</script>
+</body>
+</html>
